@@ -1,0 +1,17 @@
+development:
+  user_class_name: "User"
+  registration_enabled: true
+  default_locale: "en"
+  default_time_zone: "UTC"
+
+test:
+  user_class_name: "User"
+  registration_enabled: true
+  default_locale: "en"
+  default_time_zone: "UTC"
+
+production:
+  user_class_name: "User"
+  registration_enabled: true
+  default_locale: "en"
+  default_time_zone: "UTC"

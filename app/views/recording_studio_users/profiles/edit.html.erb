@@ -1,0 +1,12 @@
+<%= render FlatPack::PageTitle::Component.new(title: "Edit profile") %>
+
+<%= form_with url: profile_path, method: :patch do |f| %>
+  <%= render FlatPack::TextInput::Component.new(name: "profile[display_name]", label: "Display name", value: @profile&.display_name) %>
+  <%= render FlatPack::TextArea::Component.new(name: "profile[biography]", label: "Biography", value: @profile&.biography) %>
+  <%= render FlatPack::TextInput::Component.new(name: "profile[locale]", label: "Locale", value: @profile&.locale) %>
+  <%= render FlatPack::TextInput::Component.new(name: "profile[time_zone]", label: "Time zone", value: @profile&.time_zone) %>
+
+  <div class="mt-4">
+    <%= render FlatPack::Button::Component.new(type: :submit, text: "Save", style: :primary) %>
+  </div>
+<% end %>

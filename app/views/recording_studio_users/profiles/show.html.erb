@@ -1,0 +1,10 @@
+<%= render FlatPack::PageTitle::Component.new(title: "Profile") %>
+
+<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+  <% card.body do %>
+    <p><strong>Name:</strong> <%= RecordingStudioUsers.display_name(@user, context: { actor: @user }) %></p>
+    <p><strong>Bio:</strong> <%= @profile&.biography.to_s.presence || "—" %></p>
+    <p><strong>Locale:</strong> <%= @profile&.locale.to_s.presence || "—" %></p>
+    <p><strong>Time zone:</strong> <%= @profile&.time_zone.to_s.presence || "—" %></p>
+  <% end %>
+<% end %>
