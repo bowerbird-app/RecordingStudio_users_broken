@@ -43,5 +43,8 @@ module Dummy
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # PostgreSQL triggers enforce append-only profile snapshots.
+    config.active_record.schema_format = :sql
   end
 end

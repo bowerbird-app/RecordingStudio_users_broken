@@ -2,7 +2,11 @@
 
 source "https://rubygems.org"
 
-# Specify your gem's dependencies in gem_template.gemspec
+# RecordingStudio is not published to RubyGems. Keep the verified source explicit
+# for development while the gemspec preserves the normal runtime dependency.
+gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "v3.0.3"
+
+# Specify the engine's dependencies in recording_studio_users.gemspec.
 gem "devise"
 gemspec
 

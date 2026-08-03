@@ -33,6 +33,12 @@ previous_actor = Current.actor
 Current.actor = user
 
 begin
+  RecordingStudioUsers::Services::ProvisionUser.call(
+    user: user,
+    actor: user,
+    profile_attributes: { display_name: "Admin User" }
+  )
+
   # Create the root recording
   root_recording = RecordingStudio.root_recording_for(workspace)
   accessible_root_recording = RecordingStudio.root_recording_for(accessible_workspace)
@@ -46,6 +52,7 @@ ensure
 end
 
 puts "Seeded: admin@admin.com / Password"
+puts "Seeded: Recording Studio user root and profile for #{user.email}"
 puts "Seeded: Workspace '#{workspace.name}' with root recording ##{root_recording.id}"
 puts "Seeded: Workspace '#{accessible_workspace.name}' with root recording ##{accessible_root_recording.id}"
 puts "Seeded: Workspace '#{private_workspace.name}' with root recording ##{private_root_recording.id}"

@@ -9,9 +9,14 @@ require "rails/test_help"
 class RecordingStudioV3Test < ActiveSupport::TestCase
   test "dummy recordable declarations validate and expose v3 introspection" do
     assert RecordingStudio.validate_recordable_declarations!
-    assert_equal ["Workspace"], RecordingStudio.root_recordable_types
+    assert_includes RecordingStudio.root_recordable_types, "Workspace"
+    assert_includes RecordingStudio.root_recordable_types, "RecordingStudioUsers::UserRoot"
     assert_equal %w[Workspace Folder], RecordingStudio.allowed_parent_types_for("Folder")
     assert_equal %w[Workspace Folder], RecordingStudio.allowed_parent_types_for(Page)
+    assert_equal(
+      ["RecordingStudioUsers::UserRoot"],
+      RecordingStudio.allowed_parent_types_for("RecordingStudioUsers::Profile")
+    )
   end
 
   test "root recordable creates a root recording" do

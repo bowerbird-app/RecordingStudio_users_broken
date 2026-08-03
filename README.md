@@ -1,139 +1,145 @@
-# GemTemplate
+# RecordingStudioUsers
 
-Internal template for building Rails engine addons on top of RecordingStudio.
+`RecordingStudioUsers` is a data-focused Rails engine for user-owned Recording Studio roots and immutable profile history.
+It does not own authentication, routes, access policy, or host user lifecycle callbacks.
 
-## What's Included
+## Requirements
 
-- **RecordingStudio** gem installed and configured
-- **Devise** authentication with a pre-seeded admin user
-- **Workspace**, **Folder**, and **Page** recordables seeded into the dummy host app
-- **FlatPack** UI component library for all views
-- **Dummy app** (`test/dummy/`) with a FlatPack-based sign-in screen, a simple home page, mounted RecordingStudio routes, and FlatPack's built-in rounded theme enabled by default
+- Ruby 3.3+
+- Rails 8.1
+- PostgreSQL with UUID and JSONB support
+- RecordingStudio 3.x
+- A host user model with a UUID primary key
 
-The dummy app ships with a starter sidebar documentation shell for authenticated pages. The menu entries in `test/dummy/app/views/layouts/flat_pack/_sidebar.html.erb` and the linked docs pages are intended to be rewritten to suit the addon you are building; the template provides the structure and styling, not final product copy. By default, that starter shell uses FlatPack's built-in rounded theme via the root layout attribute rather than custom Tailwind theme recreation.
-
-## Quick Start
-
-### GitHub Codespaces (Recommended)
-
-1. Click **Code** → **Codespaces** → **Create codespace**
-2. Wait for setup to complete
-3. Run:
-   ```bash
-   cd test/dummy
-   bin/rails db:setup
-   bin/dev
-   ```
-4. Open port 3000 — you'll land on the dummy app home page and can sign in at `/users/sign_in`
-
-The dummy app is intended as a host-app validation surface for authentication, FlatPack rendering, Tailwind source scanning, and RecordingStudio route wiring.
-
-### Login Credentials
-
-| Field    | Value             |
-|----------|-------------------|
-| Email    | admin@admin.com   |
-| Password | Password          |
-
-The login form is prefilled with these credentials for fast access.
-
-### Useful Routes
-
-- `/` — dummy app home page
-- `/users/sign_in` — Devise sign-in page
-- `/recording_studio` — redirect to `/` while the mounted RecordingStudio engine remains data/API-focused
-- `/docs/install` — install guide rendered inside the dummy app
-- `/docs/config`, `/docs/recordable_types`, `/docs/recordings_tree`, `/docs/gem_views`, `/docs/methods` — starter sidebar pages to customize for your gem
-
-The home page in `test/dummy/app/views/home/index.html.erb` is also a deliberate starting point. Keep it focused on a minimal demo of the gem's primary behavior; use the sidebar pages for deeper explanations and supporting reference material.
-
-## Architecture
-
-### Root Recording Pattern
-
-This template follows RecordingStudio's root recording pattern:
-
-- **Workspace** is the top-level recordable
-- **Folder** and **Page** demonstrate nested recordables under the workspace root
-- Each configured recordable declares `recording_studio_recordable(...)`; strict declaration validation stays enabled
-- A root `RecordingStudio::Recording` wraps the Workspace
-- `Current.actor` is set from `current_user` (Devise) in `ApplicationController`
-
-### Extending RecordingStudio
-
-To add new recordable types:
-
-1. Create your model (e.g., `Page`, `Comment`)
-2. Register it in `config/initializers/recording_studio.rb`:
-   ```ruby
-   RecordingStudio.configure do |config|
-     config.recordable_types = ["Workspace", "YourNewType"]
-   end
-   ```
-3. Declare whether the model can be a root and which parents may contain it:
-   ```ruby
-   class YourNewType < ApplicationRecord
-     recording_studio_recordable label: "Your new type",
-                                 root: false,
-                                 allowed_parent_types: ["Workspace", "Folder"]
-   end
-   ```
-4. Validate declarations and create recordings under the root:
-   ```ruby
-   RecordingStudio.validate_recordable_declarations!
-   root_recording = RecordingStudio.root_recording_for(workspace)
-   root_recording.record(YourNewType) do |record|
-     record.title = "Example"
-   end
-   ```
-
-### RecordingStudio v3 Declarations
-
-RecordingStudio v3 expects every configured ActiveRecord recordable type to declare its hierarchy rules:
-
-- `Workspace` declares `root: true`
-- `Folder` and `Page` declare `root: false, allowed_parent_types: ["Workspace", "Folder"]`
-- `config.require_recordable_declarations = true` remains enabled in the dummy app initializer
-
-Useful console checks:
+The foundation was implemented against RecordingStudio `v3.0.3` (`8db9ca701c862f354363edee460fad9d3b6a0b65`).
+RecordingStudio is not currently published on RubyGems, so applications must declare its source:
 
 ```ruby
-RecordingStudio.validate_recordable_declarations!
-RecordingStudio.root_recordable_types
-RecordingStudio.allowed_parent_types_for("Page")
+gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "v3.0.3"
+gem "recording_studio_users", github: "bowerbird-app/RecordingStudio_users"
 ```
 
-### FlatPack UI Components
+## Install
 
-All views use FlatPack ViewComponents. Available components include:
+```bash
+bundle install
+bin/rails generate recording_studio_users:install --user-model=User
+bin/rails generate recording_studio_users:migrations
+bin/rails db:migrate
+```
 
-- `FlatPack::Button::Component` — Buttons (`:primary`, `:secondary`, `:ghost`)
-- `FlatPack::Card::Component` — Cards (`:default`, `:elevated`, `:outlined`)
-- `FlatPack::Alert::Component` — Alerts (`:success`, `:error`, `:warning`, `:info`)
-- `FlatPack::Badge::Component` — Status badges
-- `FlatPack::Table::Component` — Data tables
-- `FlatPack::TextInput::Component`, `EmailInput`, `PasswordInput` — Form inputs
-- `FlatPack::Breadcrumb::Component` — Navigation breadcrumbs
-- `FlatPack::Navbar::Component` — Navigation sidebar
+The append-only guard is a PostgreSQL trigger. Applications that load schema snapshots instead of replaying migrations
+must use `config.active_record.schema_format = :sql` so `db:structure:load` preserves it.
 
-Use the live FlatPack demo app at [flatpack-c6p8f.ondigitalocean.app](https://flatpack-c6p8f.ondigitalocean.app/) as the approved UI reference for current shared patterns. Its component table is the fastest way to discover available FlatPack components before introducing new custom UI, and user-provided FlatPack demo URLs should be treated as task context.
+Without `--user-model`, the generator only copies the initializer. Add the concern yourself:
 
-In GitHub Codespaces or other restricted environments, you may need to enable access to that URL before the agent can inspect the app. If access is unavailable, provide sanitized screenshots, copied markup, or component details so the agent can stay aligned with the shared UI.
+```ruby
+class User < ApplicationRecord
+  include RecordingStudioUsers::User
+end
+```
 
-See the [FlatPack README](https://github.com/bowerbird-app/flatpack) for full documentation.
+The generator deliberately does not mount routes, create users, add authentication callbacks, grant access, install
+attachments, or register admin resources.
 
-## Tech Stack
+## Configuration
 
-| Component       | Version |
-|-----------------|---------|
-| Ruby            | 3.3+    |
-| Rails           | 8.1+    |
-| PostgreSQL      | 16      |
-| TailwindCSS     | 4       |
-| RecordingStudio | v3.0.0 (pinned to `recording_studio/v3.0.0` in `test/dummy/Gemfile`) |
-| FlatPack        | v0.1.129 (pinned in `test/dummy/Gemfile`) |
-| Devise          | latest  |
+```ruby
+RecordingStudioUsers.configure do |config|
+  config.user_class_name = "User"
+  config.profile_search_limit = 25
 
-## Documentation
+  config.user_name_resolver = ->(user) { user.name.presence || user.email }
+  config.user_loader = ->(id:) { User.find_by(id: id) }
 
-The original gem template documentation is preserved in `docs/gem_template/` as architectural reference material. Use it as background on the engine conventions; the README and dummy app are the source of truth for the Recording Studio addon workflow.
+  config.policy_resolver = lambda do |actor:, user:, record:|
+    MyUsersPolicy.new(actor: actor, user: user, record: record)
+  end
+
+  config.profile_searcher = lambda do |query:, relation:, limit:|
+    relation.where("LOWER(display_name) LIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(query.downcase)}%")
+            .limit(limit)
+  end
+end
+```
+
+Defaults are fail-closed:
+
+- Reads and profile writes are allowed only when actor and user are the same persisted polymorphic identity.
+- Cross-user search is denied.
+- Search is capped at 100 results.
+- Reads never provision records.
+- Admin registration is disabled.
+
+Unknown configuration keys and invalid callable contracts raise `RecordingStudioUsers::ConfigurationError`.
+
+## Provisioning and profile revisions
+
+Provision explicitly after the host application has created and authorized a user:
+
+```ruby
+result = RecordingStudioUsers::Services::ProvisionUser.call(
+  user: current_user,
+  actor: current_user,
+  profile_attributes: {
+    display_name: "Ada Lovelace",
+    locale: "en"
+  }
+)
+```
+
+Provisioning is idempotent. It creates:
+
+1. one UUID `RecordingStudioUsers::UserRoot` for the host user;
+2. one Recording Studio root recording;
+3. one child profile recording with an immutable `RecordingStudioUsers::Profile` snapshot.
+
+Revise through RecordingStudio's public `Recording#revise` API:
+
+```ruby
+profile = RecordingStudioUsers::Services::ReviseProfile.call(
+  user: current_user,
+  actor: current_user,
+  expected_profile_id: current_user.recording_studio_users_profile.id,
+  profile_attributes: { display_name: "Ada King" },
+  event_metadata: { source: "settings" }
+)
+```
+
+`expected_profile_id` provides optimistic stale-write protection. A revision creates a new profile row and keeps the
+old row referenced by Recording Studio history. No-op revisions return the current snapshot without adding an event.
+
+## Lookup and presentation
+
+These helpers are side-effect free:
+
+```ruby
+RecordingStudioUsers.user_root_for(user)
+RecordingStudioUsers.root_recording_for(user)
+RecordingStudioUsers.profile_recording_for(user)
+RecordingStudioUsers.profile_for(user)
+RecordingStudioUsers.display_name_for(user)
+RecordingStudioUsers.initials_for(user)
+
+user.recording_studio_users_profile
+user.recording_studio_users_display_name
+```
+
+`RecordingStudioUsers.load_user(id:)` accepts a bounded identifier and enforces that a custom loader returns the
+configured user class or `nil`.
+
+`RecordingStudioUsers::Search::Profiles.call(actor:, query:, limit:)` searches active current snapshots only. A custom
+search callable receives `query:`, a prefiltered `relation:`, and the normalized `limit:`. It must return profiles or an
+Active Record relation of profiles; the engine intersects the result with the active scope and reapplies the limit.
+
+## Optional integrations
+
+See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for verified API status and exact blockers. In summary:
+
+- RecordingStudioAdmin resource registration is supported only when explicitly enabled and its public API is loaded.
+- Accessible first-grant bootstrap is not implemented because its current public API authorizes through an existing
+  manager grant.
+- Attachable profile avatars are not implemented because its current public API has no singleton attachment or
+  profile-avatar delivery contract.
+
+No integration uses addon internals.

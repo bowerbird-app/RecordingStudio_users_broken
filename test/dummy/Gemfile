@@ -1,10 +1,10 @@
 source "https://rubygems.org"
 
-# Use the gem_template engine
-gem "gem_template", path: "../.."
+# RecordingStudioUsers engine under test.
+gem "recording_studio_users", path: "../.."
 
 # RecordingStudio engine
-gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "recording_studio/v3.0.0"
+gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "v3.0.3"
 gem "recording_studio_accessible", github: "bowerbird-app/RecordingStudio_accessible", tag: "0.3.1"
 
 # Root switcher for the top nav

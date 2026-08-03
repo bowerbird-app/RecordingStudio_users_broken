@@ -3,166 +3,78 @@
 require "test_helper"
 require "fileutils"
 require "tmpdir"
-require "generators/gem_template/install/install_generator"
+require "generators/recording_studio_users/install/install_generator"
+require "generators/recording_studio_users/migrations/migrations_generator"
 
 class InstallGeneratorTest < Minitest::Test
-  INSTALL_TEMPLATE_PATH = File.expand_path(
-    "../lib/generators/gem_template/install/templates/INSTALL.md",
-    __dir__
-  )
+  def test_install_copies_only_initializer_by_default
+    with_temp_app do |root|
+      generator = install_generator(root)
+      generator.stub(:say, nil) { generator.copy_initializer }
 
-  def with_temp_app
-    Dir.mktmpdir do |dir|
-      FileUtils.mkdir_p(File.join(dir, "app/assets/tailwind"))
-      yield dir
+      assert File.exist?(File.join(root, "config/initializers/recording_studio_users.rb"))
+      refute File.exist?(File.join(root, "config/routes.rb"))
+      refute File.exist?(File.join(root, "app/models/user.rb"))
     end
   end
 
-  def build_generator(destination_root, options = {})
-    GemTemplate::Generators::InstallGenerator.new(
-      [],
-      options,
-      destination_root: destination_root
-    )
-  end
+  def test_user_concern_is_only_injected_when_explicit
+    with_temp_app do |root|
+      path = File.join(root, "app/models/user.rb")
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "class User < ApplicationRecord\nend\n")
 
-  def test_mount_engine_uses_configured_mount_path
-    generator = build_generator("/tmp", mount_path: "/addons/recording")
-    routes = []
+      generator = install_generator(root, user_model: "User")
+      generator.stub(:say, nil) { generator.include_user_concern }
 
-    generator.stub(:route, ->(value) { routes << value }) do
-      generator.mount_engine
-    end
+      source = File.read(path)
+      assert_includes source, "include RecordingStudioUsers::User"
 
-    assert_equal ["mount GemTemplate::Engine, at: \"/addons/recording\""], routes
-  end
-
-  def test_add_tailwind_source_injects_engine_and_flatpack_sources
-    with_temp_app do |dir|
-      css_path = File.join(dir, "app/assets/tailwind/application.css")
-      File.write(css_path, "@import \"tailwindcss\";\n")
-
-      generator = build_generator(dir)
-
-      Rails.stub(:root, Pathname.new(dir)) do
-        generator.stub(:say, nil) do
-          generator.add_tailwind_source
-        end
-      end
-
-      css = File.read(css_path)
-      assert_tailwind_sources_present(css)
+      generator.stub(:say, nil) { generator.include_user_concern }
+      assert_equal 1, File.read(path).scan("include RecordingStudioUsers::User").size
     end
   end
 
-  def test_add_tailwind_source_does_not_duplicate_existing_entries
-    with_temp_app do |dir|
-      css_path = File.join(dir, "app/assets/tailwind/application.css")
-      File.write(css_path, <<~CSS)
-        @import "tailwindcss";
-        @source "../../vendor/bundle/**/gem_template/app/views/**/*.erb";
-        @source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/gem_template-*/app/views/**/*.erb";
-        @source "../../vendor/bundle/**/flatpack/app/components/**/*.{rb,erb}";
-        @source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-      CSS
+  def test_user_model_option_rejects_invalid_or_missing_models
+    with_temp_app do |root|
+      invalid = install_generator(root, user_model: "../../User")
+      missing = install_generator(root, user_model: "Accounts::User")
 
-      generator = build_generator(dir)
-
-      Rails.stub(:root, Pathname.new(dir)) do
-        generator.stub(:say, nil) do
-          generator.add_tailwind_source
-        end
-      end
-
-      css = File.read(css_path)
-      assert_tailwind_sources_present(css)
-      assert_tailwind_sources_count(css, 1)
+      assert_raises(Thor::Error) { invalid.include_user_concern }
+      assert_raises(Thor::Error) { missing.include_user_concern }
     end
   end
 
-  def test_add_tailwind_source_reports_missing_tailwind_config
-    with_temp_app do |dir|
-      FileUtils.rm_rf(File.join(dir, "app/assets/tailwind"))
-      generator = build_generator(dir)
-      messages = []
+  def test_migration_generator_copies_both_migrations_without_overwriting
+    with_temp_app do |root|
+      FileUtils.mkdir_p(File.join(root, "db/migrate"))
+      File.write(File.join(root, "db/migrate/20990101000000_future_change.rb"), "# frozen_string_literal: true\n")
+      generator = migration_generator(root)
+      generator.stub(:say, nil) { generator.copy_migrations }
 
-      Rails.stub(:root, Pathname.new(dir)) do
-        generator.stub(:say, ->(message, color = nil) { messages << [message, color] }) do
-          generator.add_tailwind_source
-        end
-      end
+      migrations = Dir[File.join(root, "db/migrate/*recording_studio_users*.rb")]
+      assert_equal 3, migrations.size
+      assert(migrations.all? { |path| File.basename(path).to_i > 20_990_101_000_000 })
 
-      assert_includes messages, ["Tailwind CSS not detected. Skipping Tailwind configuration.", :yellow]
-      assert_includes messages, ["If you use Tailwind, add these lines to your Tailwind CSS config:", :yellow]
-      tailwind_source_lines.each do |line|
-        assert_includes messages, ["  #{line}", :yellow]
-      end
+      generator.stub(:say, nil) { generator.copy_migrations }
+      assert_equal 3, Dir[File.join(root, "db/migrate/*recording_studio_users*.rb")].size
     end
-  end
-
-  def test_add_tailwind_source_reports_manual_configuration_when_import_is_missing
-    with_temp_app do |dir|
-      css_path = File.join(dir, "app/assets/tailwind/application.css")
-      File.write(css_path, "@source \"../local/**/*.erb\";\n")
-      generator = build_generator(dir)
-      messages = []
-
-      Rails.stub(:root, Pathname.new(dir)) do
-        generator.stub(:say, ->(message, color = nil) { messages << [message, color] }) do
-          generator.add_tailwind_source
-        end
-      end
-
-      assert_equal "@source \"../local/**/*.erb\";\n", File.read(css_path)
-      assert_includes messages, ["Could not find @import \"tailwindcss\" in your Tailwind config.", :yellow]
-      assert_includes messages, ["Please manually add these lines to your Tailwind CSS config:", :yellow]
-      tailwind_source_lines.each do |line|
-        assert_includes messages, ["  #{line}", :yellow]
-      end
-    end
-  end
-
-  def test_show_readme_displays_install_guide_for_invoke_behavior
-    generator = build_generator("/tmp")
-    shown_templates = []
-
-    generator.stub(:behavior, :invoke) do
-      generator.stub(:readme, ->(template) { shown_templates << template }) do
-        generator.show_readme
-      end
-    end
-
-    assert_equal ["INSTALL.md"], shown_templates
-  end
-
-  def test_install_guide_includes_migration_and_host_setup_steps
-    install_guide = File.read(INSTALL_TEMPLATE_PATH)
-
-    assert_includes install_guide, "bin/rails generate gem_template:migrations"
-    assert_includes install_guide, "bin/rails db:migrate"
-    assert_includes install_guide, "auth, layout, and current actor integration"
   end
 
   private
 
-  def assert_tailwind_sources_present(css)
-    tailwind_source_lines.each do |line|
-      assert_includes css, line
+  def with_temp_app
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "config/initializers"))
+      yield root
     end
   end
 
-  def assert_tailwind_sources_count(css, count)
-    tailwind_source_lines.each do |line|
-      assert_equal count, css.scan(line).size
-    end
+  def install_generator(root, options = {})
+    RecordingStudioUsers::Generators::InstallGenerator.new([], options, destination_root: root)
   end
 
-  def tailwind_source_lines
-    [
-      '@source "../../vendor/bundle/**/gem_template/app/views/**/*.erb";',
-      '@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/gem_template-*/app/views/**/*.erb";',
-      '@source "../../vendor/bundle/**/flatpack/app/components/**/*.{rb,erb}";',
-      '@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";'
-    ]
+  def migration_generator(root, options = {})
+    RecordingStudioUsers::Generators::MigrationsGenerator.new([], options, destination_root: root)
   end
 end
